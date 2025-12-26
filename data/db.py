@@ -1,39 +1,48 @@
 import sqlite3
-from typing import Any, Iterable
 from pathlib import Path
+from typing import Any, Iterable, Optional
 
 DB_PATH = Path("data") / "rdv_medical.db"
+
 
 class Database:
     def __init__(self, db_path: Path = DB_PATH):
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(db_path)
-
-        # IMPORTANT: enforce foreign keys in SQLite
         self.conn.execute("PRAGMA foreign_keys = ON;")
-
         self.conn.row_factory = sqlite3.Row
         self.cur = self.conn.cursor()
 
-    def execute(self, sql: str, param: Iterable[Any] = ()):
-        self.cur.execute(sql, param)
-        self.conn.commit()
+    def execute(self, sql: str, params: Iterable[Any] = (), commit: bool = True):
+        self.cur.execute(sql, params)
+        if commit:
+            self.conn.commit()
         return self.cur
 
-    def fetchone(self, sql: str, param: Iterable[Any] = ()):
-        self.cur.execute(sql, param)
+    def fetchone(self, sql: str, params: Iterable[Any] = ()):
+        self.cur.execute(sql, params)
         return self.cur.fetchone()
 
-    def fetchall(self, sql: str, param: Iterable[Any] = ()):
-        self.cur.execute(sql, param)
+    def fetchall(self, sql: str, params: Iterable[Any] = ()):
+        self.cur.execute(sql, params)
         return self.cur.fetchall()
+
+    # Transaction helpers
+    def begin(self):
+        # IMMEDIATE reduces race conditions when two people try same slot
+        self.conn.execute("BEGIN IMMEDIATE")
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
 
     def close(self):
         self.conn.close()
 
 
 def init_db(db: Database) -> None:
-    # USERS: patient/medecin/admin
     db.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,13 +55,12 @@ def init_db(db: Database) -> None:
     );
     """)
 
-    # CRENEAUX: availability slots
     db.execute("""
     CREATE TABLE IF NOT EXISTS creneaux (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         medecin_id INTEGER NOT NULL,
-        start TEXT NOT NULL, -- ISO datetime string
-        end TEXT NOT NULL,   -- ISO datetime string
+        start TEXT NOT NULL,
+        end TEXT NOT NULL,
         available INTEGER NOT NULL DEFAULT 1,
         blocked INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (medecin_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -60,7 +68,6 @@ def init_db(db: Database) -> None:
     );
     """)
 
-    # RDV: appointments
     db.execute("""
     CREATE TABLE IF NOT EXISTS rdv (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
