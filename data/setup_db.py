@@ -12,7 +12,11 @@ def seed_users(db: Database) -> None:
     ]
 
     for username, plain_pwd, role, email, speciality in users:
-        exists = db.fetchone("SELECT 1 FROM users WHERE username=?", (username,))
+        # Case-insensitive exists check (consistent with COLLATE NOCASE)
+        exists = db.fetchone(
+            "SELECT 1 FROM users WHERE username = ? COLLATE NOCASE",
+            (username,),
+        )
         if not exists:
             db.execute(
                 """
@@ -31,22 +35,18 @@ def seed_creneaux(db: Database) -> None:
 
     medecin_id = doc["id"]
 
-    # Insert demo slots only if none exist
-    existing = db.fetchone("SELECT 1 FROM creneaux WHERE medecin_id=?", (medecin_id,))
-    if existing:
-        return
-
-    now = datetime.now().replace(second=0, microsecond=0)
-
-    slot1_start = (now + timedelta(days=1)).replace(hour=9, minute=0)
+    # Create 2 future slots (good for reminder tests later)
+    now = datetime.now()
+    slot1_start = now + timedelta(days=2, hours=1)
     slot1_end = slot1_start + timedelta(minutes=30)
 
-    slot2_start = (now + timedelta(days=2)).replace(hour=10, minute=0)
+    slot2_start = now + timedelta(days=2, hours=2)
     slot2_end = slot2_start + timedelta(minutes=30)
 
+    # Insert slots (unique constraint prevents duplicates)
     db.execute(
         """
-        INSERT INTO creneaux(medecin_id, start, end, available, blocked)
+        INSERT OR IGNORE INTO creneaux(medecin_id, start, end, available, blocked)
         VALUES (?, ?, ?, 1, 0)
     """,
         (medecin_id, slot1_start.isoformat(), slot1_end.isoformat()),
@@ -54,7 +54,7 @@ def seed_creneaux(db: Database) -> None:
 
     db.execute(
         """
-        INSERT INTO creneaux(medecin_id, start, end, available, blocked)
+        INSERT OR IGNORE INTO creneaux(medecin_id, start, end, available, blocked)
         VALUES (?, ?, ?, 1, 0)
     """,
         (medecin_id, slot2_start.isoformat(), slot2_end.isoformat()),

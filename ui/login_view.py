@@ -95,7 +95,6 @@ class LoginView:
             traceback.print_exc()
             messagebox.showerror("Erreur", f"Crash after login:\n{e}")
 
-    # ✅ REAL register method (this was missing)
     def open_register_patient(self):
         from ui.patient_register import PatientRegister
 
