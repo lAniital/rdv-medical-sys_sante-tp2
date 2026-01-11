@@ -14,6 +14,9 @@ FONT_BTN = ("Segoe UI", 11, "bold")
 
 def apply_dark(root: tk.Tk | tk.Toplevel):
     root.configure(bg=BG)
+    
+def apply_theme(root: tk.Tk | tk.Toplevel):
+    apply_dark(root)
 
 
 def make_btn(parent, text, command, width=28):

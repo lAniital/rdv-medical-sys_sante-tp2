@@ -237,7 +237,8 @@ class PatientBookingWindow:
         self.selected_creneau_id = None
         self._clear_times()
 
-        slots = list(self.service.list_available_slots_by_date(self.selected_medecin_id, self.selected_date.isoformat()))
+        slots = list(self.service.list_available_slots_by_date(self.selected_medecin_id, self.selected_date))
+
         if not slots:
             messagebox.showinfo("Info", "Aucun créneau disponible pour cette date.")
             return
