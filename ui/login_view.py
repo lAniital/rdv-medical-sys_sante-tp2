@@ -67,11 +67,10 @@ class LoginView:
             messagebox.showerror("Erreur", f"Ce compte n’est pas un {self.role}.")
             return
 
-        # UPDATED — PATIENT flow: open PatientHome with on_logout callback
+        # PATIENT flow
         if user["role"] == "PATIENT":
             from ui.patient_home import PatientHome
 
-            # hide login window
             self.root.withdraw()
 
             def back_to_login():
@@ -96,8 +95,15 @@ class LoginView:
             traceback.print_exc()
             messagebox.showerror("Erreur", f"Crash after login:\n{e}")
 
+    # ✅ REAL register method (this was missing)
     def open_register_patient(self):
-        messagebox.showinfo("Info", "On crée l'écran 'Créer un compte' dans la prochaine étape.")
+        from ui.patient_register import PatientRegister
+
+        PatientRegister(
+            self.auth,
+            self.root,
+            on_success=lambda: self.username.focus_set()
+        )
 
     def back_to_menu(self):
         try:

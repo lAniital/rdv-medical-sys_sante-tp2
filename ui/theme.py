@@ -14,7 +14,9 @@ FONT_BTN = ("Segoe UI", 11, "bold")
 
 def apply_dark(root: tk.Tk | tk.Toplevel):
     root.configure(bg=BG)
-    
+
+
+# Alias so other windows can reuse the same dark theme name
 def apply_theme(root: tk.Tk | tk.Toplevel):
     apply_dark(root)
 
@@ -38,7 +40,11 @@ def make_label(parent, text, font=FONT_NORMAL):
 
 
 def make_entry(parent, show=None, width=28):
-    e = tk.Entry(
-        parent, show=show, bg=ENTRY_BG, fg=ENTRY_FG, width=width, font=FONT_NORMAL
+    return tk.Entry(
+        parent,
+        show=show,
+        bg=ENTRY_BG,
+        fg=ENTRY_FG,
+        width=width,
+        font=FONT_NORMAL,
     )
-    return e
