@@ -14,7 +14,7 @@ def main():
 
     print("\n--- AUTH TEST (patient1 / 1234) ---")
     user = auth.login("patient1", "1234")
-    print("Login OK?" , bool(user))
+    print("Login OK?", bool(user))
     if not user:
         db.close()
         return

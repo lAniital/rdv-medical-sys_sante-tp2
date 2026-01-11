@@ -1,9 +1,12 @@
-# services/rdv_service.py
-from datetime import datetime, date as Date, time as Time, timedelta
+import tkinter as tk
+from tkinter import messagebox
+
 from data.db import Database
+from services.rdv_service import RDVService
+from datetime import datetime, date as Date, time as Time, timedelta
 
 
-class RDVService:
+class PatientService:
     def __init__(self, db: Database):
         self.db = db
 
@@ -16,37 +19,6 @@ class RDVService:
         return self.db.fetchall(
             "SELECT id, start, end FROM creneaux WHERE medecin_id=? AND available=1 AND blocked=0 ORDER BY start",
             (medecin_id,),
-        )
-
-    # NEW 1: list available slots for a specific date
-    def list_available_slots_by_date(self, medecin_id: int, day: Date):
-        day_start = datetime(day.year, day.month, day.day, 0, 0, 0).isoformat()
-        day_end = datetime(day.year, day.month, day.day, 23, 59, 59).isoformat()
-
-        return self.db.fetchall(
-            """
-            SELECT id, start, end
-            FROM creneaux
-            WHERE medecin_id=?
-              AND available=1 AND blocked=0
-              AND start >= ? AND start <= ?
-            ORDER BY start
-            """,
-            (medecin_id, day_start, day_end),
-        )
-
-    # NEW 2: get a slot by its exact start datetime (iso string)
-    def get_slot_by_start(self, medecin_id: int, start_iso: str):
-        return self.db.fetchone(
-            """
-            SELECT id, start, end
-            FROM creneaux
-            WHERE medecin_id=?
-              AND available=1 AND blocked=0
-              AND start=?
-            LIMIT 1
-            """,
-            (medecin_id, start_iso),
         )
 
     def book_rdv(
@@ -77,7 +49,7 @@ class RDVService:
                 UPDATE creneaux
                 SET available=0
                 WHERE id=? AND available=1 AND blocked=0
-                """,
+            """,
                 (creneau_id,),
                 commit=False,
             )
@@ -91,7 +63,7 @@ class RDVService:
                 """
                 INSERT INTO rdv(patient_id, medecin_id, creneau_id, status, is_urgent, urgent_reason, created_at, reminder_sent)
                 VALUES (?, ?, ?, 'PREVU', ?, ?, ?, 0)
-                """,
+            """,
                 (
                     patient_id,
                     medecin_id,
@@ -129,7 +101,7 @@ class RDVService:
             JOIN creneaux c ON r.creneau_id = c.id
             {where}
             ORDER BY c.start
-            """,
+        """,
             tuple(params),
         )
 
@@ -152,7 +124,7 @@ class RDVService:
             JOIN creneaux c ON r.creneau_id = c.id
             {where}
             ORDER BY c.start
-            """,
+        """,
             tuple(params),
         )
 
@@ -167,9 +139,7 @@ class RDVService:
             self.db.begin()
 
             self.db.execute(
-                "UPDATE rdv SET status='ANNULE' WHERE id=?",
-                (rdv_id,),
-                commit=False,
+                "UPDATE rdv SET status='ANNULE' WHERE id=?", (rdv_id,), commit=False
             )
 
             self.db.execute(
@@ -192,7 +162,7 @@ class RDVService:
                 SELECT r.id, r.status, r.medecin_id, r.creneau_id
                 FROM rdv r
                 WHERE r.id=?
-                """,
+            """,
                 (rdv_id,),
             )
             if not old or old["status"] == "ANNULE":
@@ -204,7 +174,7 @@ class RDVService:
                 SELECT id, medecin_id
                 FROM creneaux
                 WHERE id=?
-                """,
+            """,
                 (new_creneau_id,),
             )
             if not new_slot:
@@ -220,7 +190,7 @@ class RDVService:
                 UPDATE creneaux
                 SET available=0
                 WHERE id=? AND available=1 AND blocked=0
-                """,
+            """,
                 (new_creneau_id,),
                 commit=False,
             )
@@ -275,12 +245,12 @@ class RDVService:
                 s = cursor_dt
                 e = cursor_dt + timedelta(minutes=step)
 
-                # FIX: db.fetchone does NOT take commit=False
+                # FIX: do NOT pass commit=False (db.fetchone doesn't have that parameter)
                 exists = self.db.fetchone(
                     """
                     SELECT id FROM creneaux
                     WHERE medecin_id=? AND start=? AND end=?
-                    """,
+                """,
                     (medecin_id, s.isoformat(), e.isoformat()),
                 )
 
@@ -289,7 +259,7 @@ class RDVService:
                         """
                         INSERT INTO creneaux(medecin_id, start, end, available, blocked)
                         VALUES (?, ?, ?, 1, 0)
-                        """,
+                    """,
                         (medecin_id, s.isoformat(), e.isoformat()),
                         commit=False,
                     )
@@ -304,7 +274,7 @@ class RDVService:
             self.db.rollback()
             return 0
 
-    # Reminder: default within 48h and show only once
+    # --- replace get_reminder_for_patient with this ---
     def get_reminder_for_patient(self, patient_id: int, hours: int = 48):
         if hours <= 0:
             return None
@@ -328,16 +298,12 @@ class RDVService:
               AND c.start <= ?
             ORDER BY c.start
             LIMIT 1
-            """,
+        """,
             (patient_id, now.isoformat(), limit.isoformat()),
         )
 
-    def mark_reminder_sent(self, rdv_id: int) -> bool:
-        try:
-            self.db.execute("UPDATE rdv SET reminder_sent = 1 WHERE id=?", (rdv_id,))
-            return True
-        except Exception:
-            return False
+    def mark_reminder_sent(self, rdv_id: int) -> None:
+        self.db.execute("UPDATE rdv SET reminder_sent=1 WHERE id=?", (rdv_id,))
 
     # Helpers
     def _parse_hhmm(self, hhmm: str) -> Time:
@@ -356,9 +322,5 @@ class RDVService:
 
     def _combine_date_time(self, day: Date, t: Time) -> datetime:
         return datetime(
-            year=day.year,
-            month=day.month,
-            day=day.day,
-            hour=t.hour,
-            minute=t.minute,
+            year=day.year, month=day.month, day=day.day, hour=t.hour, minute=t.minute
         )

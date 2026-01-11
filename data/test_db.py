@@ -1,5 +1,6 @@
 from data.db import Database
 
+
 def main():
     db = Database()
 
@@ -14,6 +15,7 @@ def main():
         print(dict(s))
 
     db.close()
+
 
 if __name__ == "__main__":
     main()

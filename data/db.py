@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable
 
 DB_PATH = Path("data") / "rdv_medical.db"
 
@@ -19,13 +19,19 @@ class Database:
             self.conn.commit()
         return self.cur
 
-    def fetchone(self, sql: str, params: Iterable[Any] = ()):
+    def fetchone(self, sql: str, params: Iterable[Any] = (), commit: bool = False):
         self.cur.execute(sql, params)
-        return self.cur.fetchone()
+        row = self.cur.fetchone()
+        if commit:
+            self.conn.commit()
+        return row
 
-    def fetchall(self, sql: str, params: Iterable[Any] = ()):
+    def fetchall(self, sql: str, params: Iterable[Any] = (), commit: bool = False):
         self.cur.execute(sql, params)
-        return self.cur.fetchall()
+        rows = self.cur.fetchall()
+        if commit:
+            self.conn.commit()
+        return rows
 
     # Transaction helpers
     def begin(self):
@@ -43,7 +49,8 @@ class Database:
 
 
 def init_db(db: Database) -> None:
-    db.execute("""
+    db.execute(
+        """
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -53,9 +60,11 @@ def init_db(db: Database) -> None:
         email TEXT,
         speciality TEXT
     );
-    """)
+    """
+    )
 
-    db.execute("""
+    db.execute(
+        """
     CREATE TABLE IF NOT EXISTS creneaux (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         medecin_id INTEGER NOT NULL,
@@ -66,9 +75,11 @@ def init_db(db: Database) -> None:
         FOREIGN KEY (medecin_id) REFERENCES users(id) ON DELETE CASCADE,
         UNIQUE(medecin_id, start, end)
     );
-    """)
+    """
+    )
 
-    db.execute("""
+    db.execute(
+        """
     CREATE TABLE IF NOT EXISTS rdv (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         patient_id INTEGER NOT NULL,
@@ -83,4 +94,5 @@ def init_db(db: Database) -> None:
         FOREIGN KEY (medecin_id) REFERENCES users(id) ON DELETE RESTRICT,
         FOREIGN KEY (creneau_id) REFERENCES creneaux(id) ON DELETE RESTRICT
     );
-    """)
+    """
+    )
