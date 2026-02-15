@@ -67,7 +67,7 @@ class LoginView:
             messagebox.showerror("Erreur", f"Ce compte n’est pas un {self.role}.")
             return
 
-        # PATIENT flow
+        # PATIENT flow (callback style)
         if user["role"] == "PATIENT":
             from ui.patient_home import PatientHome
 
@@ -79,12 +79,17 @@ class LoginView:
             PatientHome(user, on_logout=back_to_login)
             return
 
-        # Other roles
+        # MEDECIN flow (same callback style as patient)
+        if user["role"] == "MEDECIN":
+            from ui.medecin_view import MedecinView
+
+            self.root.withdraw()
+            MedecinView(user, on_logout=lambda: self.root.deiconify())
+            return
+
+        # ADMIN flow
         try:
-            if user["role"] == "MEDECIN":
-                from ui.medecin_view import MedecinView
-                MedecinView(user)
-            elif user["role"] == "ADMIN":
+            if user["role"] == "ADMIN":
                 from ui.admin_view import AdminView
                 AdminView(user)
 

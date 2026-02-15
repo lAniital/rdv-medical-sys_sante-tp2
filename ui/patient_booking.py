@@ -1,3 +1,7 @@
+# =========================
+# ui/patient_booking.py
+# (Disable past days in calendar)
+# =========================
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime, date
@@ -16,11 +20,11 @@ BTN_FG = "#000000"
 
 class PatientBookingWindow:
     """
-    Booking flow like the demo:
+    Booking flow:
     1) Choose doctor
-    2) Choose date (calendar)
+    2) Choose date (calendar)  -> past days disabled
     3) Click "Afficher les créneaux"
-    4) Pick an hour button
+    4) Pick an hour button     -> past slots disabled
     5) Confirm booking (+ urgent option)
     """
 
@@ -124,7 +128,7 @@ class PatientBookingWindow:
             selectcolor=DARK_BG,
             activebackground=DARK_BG,
             activeforeground=DARK_FG,
-            command=self.on_toggle_urgent
+            command=self.on_toggle_urgent,
         ).pack(anchor="w")
 
         tk.Label(right, text="Motif urgence :", bg=DARK_BG, fg=DARK_FG).pack(anchor="w", pady=(8, 0))
@@ -173,10 +177,11 @@ class PatientBookingWindow:
         for w in self.cal_frame.winfo_children():
             w.destroy()
 
+        today = date.today()
+
         month_name = calendar.month_name[self.cal_month]
         self.lbl_month.config(text=f"{month_name} {self.cal_year}")
 
-        # headers
         headers = ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"]
         hdr = tk.Frame(self.cal_frame, bg=DARK_BG)
         hdr.pack(fill="x")
@@ -194,18 +199,23 @@ class PatientBookingWindow:
                     tk.Label(row, text=" ", width=4, bg=DARK_BG, fg=DARK_FG).pack(side="left")
                     continue
 
-                d = date(self.cal_year, self.cal_month, day_num)
-                is_selected = (d == self.selected_date)
+                day_date = date(self.cal_year, self.cal_month, day_num)
+                is_selected = day_date == self.selected_date
 
-                btn = tk.Button(
+                day_btn = tk.Button(
                     row,
                     text=str(day_num),
                     width=4,
                     bg=("#bbbbbb" if is_selected else BTN_BG),
                     fg=BTN_FG,
-                    command=lambda dd=d: self.select_date(dd)
+                    command=lambda dd=day_date: self.select_date(dd),
                 )
-                btn.pack(side="left")
+
+                # Disable past days
+                if day_date < today:
+                    day_btn.configure(state="disabled")
+
+                day_btn.pack(side="left")
 
     def select_date(self, d: date):
         self.selected_date = d
@@ -238,42 +248,41 @@ class PatientBookingWindow:
         self._clear_times()
 
         slots = list(self.service.list_available_slots_by_date(self.selected_medecin_id, self.selected_date))
-
         if not slots:
             messagebox.showinfo("Info", "Aucun créneau disponible pour cette date.")
             return
 
-        # Create hour buttons (wrap)
+        now = datetime.now()
+
         col = 0
         row = 0
-        for s in slots:
-            start_dt = datetime.fromisoformat(s["start"])
+        for slot in slots:
+            creneau_id = slot["id"]
+            start_dt = datetime.fromisoformat(slot["start"])
             label = start_dt.strftime("%H:%M")
 
-            b = tk.Button(
+            btn = tk.Button(
                 self.times_frame,
                 text=label,
                 width=8,
                 bg=BTN_BG,
                 fg=BTN_FG,
-                command=lambda sid=s["id"]: self.select_time_slot(sid)
+                command=lambda cid=creneau_id: self.select_slot(cid),  # FIX capture
             )
-            b.grid(row=row, column=col, padx=4, pady=4)
+
+            # Disable past times
+            if start_dt < now:
+                btn.configure(state="disabled")
+
+            btn.grid(row=row, column=col, padx=4, pady=4)
 
             col += 1
             if col >= 6:
                 col = 0
                 row += 1
 
-    def select_time_slot(self, creneau_id: int):
+    def select_slot(self, creneau_id: int):
         self.selected_creneau_id = creneau_id
-        # highlight: re-render times by reloading (simple)
-        self.load_slots_for_selection()
-        # then mark selected
-        for child in self.times_frame.winfo_children():
-            if isinstance(child, tk.Button) and child.cget("text"):
-                # nothing else needed; simple app — keep default
-                pass
 
     def _clear_times(self):
         for w in self.times_frame.winfo_children():
@@ -298,14 +307,14 @@ class PatientBookingWindow:
             messagebox.showwarning("Info", "Sélectionnez une heure (créneau).")
             return
 
-        is_urgent = (self.urgent_var.get() == 1)
+        is_urgent = self.urgent_var.get() == 1
         reason = self.reason_entry.get().strip() if is_urgent else None
 
         ok = self.service.book_rdv(
             patient_id=self.user["id"],
             creneau_id=self.selected_creneau_id,
             is_urgent=is_urgent,
-            reason=reason
+            reason=reason,
         )
 
         if not ok:
@@ -324,3 +333,17 @@ class PatientBookingWindow:
         except Exception:
             pass
         self.win.destroy()
+
+
+# =========================
+# services/rdv_service.py
+# (Block creating slots in the past)
+# =========================
+# Add this check at the TOP of create_day_slots (right after `day = self._parse_date_only(date)`):
+#
+#     from datetime import datetime
+#     day = self._parse_date_only(date)
+#     if day < datetime.now().date():
+#         return 0
+#
+# Then keep the rest of your method as-is.

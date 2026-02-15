@@ -18,10 +18,14 @@ class RDVService:
             (medecin_id,),
         )
 
-    # NEW 1: list available slots for a specific date
-    def list_available_slots_by_date(self, medecin_id: int, day: Date):
-        day_start = datetime(day.year, day.month, day.day, 0, 0, 0).isoformat()
-        day_end = datetime(day.year, day.month, day.day, 23, 59, 59).isoformat()
+    # list available slots for a specific date (Date OR "YYYY-MM-DD"), FUTURE ONLY
+    def list_available_slots_by_date(self, medecin_id: int, day: Date | str):
+        if isinstance(day, str):
+            day = datetime.fromisoformat(day.strip()).date()
+
+        day_start_dt = datetime(day.year, day.month, day.day, 0, 0, 0)
+        day_end_dt = day_start_dt + timedelta(days=1)
+        now_iso = datetime.now().isoformat()
 
         return self.db.fetchall(
             """
@@ -29,13 +33,13 @@ class RDVService:
             FROM creneaux
             WHERE medecin_id=?
               AND available=1 AND blocked=0
-              AND start >= ? AND start <= ?
+              AND start >= ?               -- future only
+              AND start >= ? AND start < ? -- same day
             ORDER BY start
             """,
-            (medecin_id, day_start, day_end),
+            (medecin_id, now_iso, day_start_dt.isoformat(), day_end_dt.isoformat()),
         )
 
-    # NEW 2: get a slot by its exact start datetime (iso string)
     def get_slot_by_start(self, medecin_id: int, start_iso: str):
         return self.db.fetchone(
             """
@@ -49,6 +53,119 @@ class RDVService:
             (medecin_id, start_iso),
         )
 
+    def list_doctor_agenda(self, medecin_id: int, include_canceled: bool = False):
+        where = "WHERE r.medecin_id = ?"
+        params = [medecin_id]
+        if not include_canceled:
+            where += " AND r.status != 'ANNULE'"
+
+        return self.db.fetchall(
+            f"""
+            SELECT r.id, r.status, r.is_urgent, r.urgent_reason, r.created_at,
+                   p.username AS patient_name,
+                   c.start, c.end,
+                   r.creneau_id,
+                   p.id AS patient_id
+            FROM rdv r
+            JOIN users p ON r.patient_id = p.id
+            JOIN creneaux c ON r.creneau_id = c.id
+            {where}
+            ORDER BY c.start
+            """,
+            tuple(params),
+        )
+
+    def list_slots_for_day(self, medecin_id: int, day_iso: str):
+        day = datetime.fromisoformat(day_iso.strip()).date()
+        day_start = datetime(day.year, day.month, day.day, 0, 0, 0).isoformat()
+        day_end = (datetime(day.year, day.month, day.day, 0, 0, 0) + timedelta(days=1)).isoformat()
+
+        return self.db.fetchall(
+            """
+            SELECT id, start, end, available, blocked
+            FROM creneaux
+            WHERE medecin_id = ?
+              AND start >= ?
+              AND start < ?
+            ORDER BY start
+            """,
+            (medecin_id, day_start, day_end),
+        )
+
+    def create_day_slots(
+        self,
+        medecin_id: int,
+        date: str | datetime | Date,
+        start: str = "08:30",
+        end: str = "12:00",
+        step: int = 30,
+    ) -> int:
+        day = self._parse_date_only(date)
+
+        # Prevent creating slots in the past
+        if day < datetime.now().date():
+            return 0
+
+        start_dt = self._combine_date_time(day, self._parse_hhmm(start))
+        end_dt = self._combine_date_time(day, self._parse_hhmm(end))
+
+        if step <= 0 or end_dt <= start_dt:
+            return 0
+
+        created = 0
+        cursor_dt = start_dt
+
+        try:
+            self.db.begin()
+
+            while cursor_dt + timedelta(minutes=step) <= end_dt:
+                s = cursor_dt
+                e = cursor_dt + timedelta(minutes=step)
+
+                exists = self.db.fetchone(
+                    """
+                    SELECT id FROM creneaux
+                    WHERE medecin_id=? AND start=? AND end=?
+                    """,
+                    (medecin_id, s.isoformat(), e.isoformat()),
+                )
+
+                if not exists:
+                    self.db.execute(
+                        """
+                        INSERT INTO creneaux(medecin_id, start, end, available, blocked)
+                        VALUES (?, ?, ?, 1, 0)
+                        """,
+                        (medecin_id, s.isoformat(), e.isoformat()),
+                        commit=False,
+                    )
+                    created += 1
+
+                cursor_dt = e
+
+            self.db.commit()
+            return created
+
+        except Exception:
+            self.db.rollback()
+            return 0
+
+    def create_day_slots_iso(
+        self,
+        medecin_id: int,
+        day_iso: str,
+        start_hhmm: str = "08:30",
+        end_hhmm: str = "12:00",
+        step_min: int = 30,
+    ) -> int:
+        return self.create_day_slots(
+            medecin_id=medecin_id,
+            date=day_iso,
+            start=start_hhmm,
+            end=end_hhmm,
+            step=step_min,
+        )
+
     def book_rdv(
         self,
         patient_id: int,
@@ -60,7 +177,6 @@ class RDVService:
             return False
 
         try:
-            # Check slot exists (read only)
             slot = self.db.fetchone(
                 "SELECT id, medecin_id FROM creneaux WHERE id=?", (creneau_id,)
             )
@@ -71,7 +187,6 @@ class RDVService:
 
             self.db.begin()
 
-            # 1) Lock slot first (atomic)
             cur = self.db.execute(
                 """
                 UPDATE creneaux
@@ -86,7 +201,6 @@ class RDVService:
                 self.db.rollback()
                 return False
 
-            # 2) Insert RDV only after the lock succeeded
             self.db.execute(
                 """
                 INSERT INTO rdv(patient_id, medecin_id, creneau_id, status, is_urgent, urgent_reason, created_at, reminder_sent)
@@ -113,7 +227,6 @@ class RDVService:
     def list_patient_rdvs(self, patient_id: int, include_canceled: bool = True):
         where = "WHERE r.patient_id = ?"
         params = [patient_id]
-
         if not include_canceled:
             where += " AND r.status != 'ANNULE'"
 
@@ -126,29 +239,6 @@ class RDVService:
                    u.id AS medecin_id
             FROM rdv r
             JOIN users u ON r.medecin_id = u.id
-            JOIN creneaux c ON r.creneau_id = c.id
-            {where}
-            ORDER BY c.start
-            """,
-            tuple(params),
-        )
-
-    def list_doctor_agenda(self, medecin_id: int, include_canceled: bool = False):
-        where = "WHERE r.medecin_id = ?"
-        params = [medecin_id]
-
-        if not include_canceled:
-            where += " AND r.status != 'ANNULE'"
-
-        return self.db.fetchall(
-            f"""
-            SELECT r.id, r.status, r.is_urgent, r.urgent_reason, r.created_at,
-                   p.username AS patient_name,
-                   c.start, c.end,
-                   r.creneau_id,
-                   p.id AS patient_id
-            FROM rdv r
-            JOIN users p ON r.patient_id = p.id
             JOIN creneaux c ON r.creneau_id = c.id
             {where}
             ORDER BY c.start
@@ -198,7 +288,6 @@ class RDVService:
             if not old or old["status"] == "ANNULE":
                 return False
 
-            # Validate new slot belongs to same doctor (read only)
             new_slot = self.db.fetchone(
                 """
                 SELECT id, medecin_id
@@ -214,7 +303,6 @@ class RDVService:
 
             self.db.begin()
 
-            # 1) Lock new slot first (atomic)
             cur = self.db.execute(
                 """
                 UPDATE creneaux
@@ -229,14 +317,12 @@ class RDVService:
                 self.db.rollback()
                 return False
 
-            # 2) Free old slot only after new one is locked
             self.db.execute(
                 "UPDATE creneaux SET available=1 WHERE id=?",
                 (old["creneau_id"],),
                 commit=False,
             )
 
-            # 3) Update RDV after both slot updates
             self.db.execute(
                 "UPDATE rdv SET creneau_id=? WHERE id=?",
                 (new_creneau_id, rdv_id),
@@ -250,61 +336,6 @@ class RDVService:
             self.db.rollback()
             return False
 
-    def create_day_slots(
-        self,
-        medecin_id: int,
-        date: str | datetime | Date,
-        start: str = "08:30",
-        end: str = "12:00",
-        step: int = 30,
-    ) -> int:
-        day = self._parse_date_only(date)
-        start_dt = self._combine_date_time(day, self._parse_hhmm(start))
-        end_dt = self._combine_date_time(day, self._parse_hhmm(end))
-
-        if step <= 0 or end_dt <= start_dt:
-            return 0
-
-        created = 0
-        cursor_dt = start_dt
-
-        try:
-            self.db.begin()
-
-            while cursor_dt + timedelta(minutes=step) <= end_dt:
-                s = cursor_dt
-                e = cursor_dt + timedelta(minutes=step)
-
-                # FIX: db.fetchone does NOT take commit=False
-                exists = self.db.fetchone(
-                    """
-                    SELECT id FROM creneaux
-                    WHERE medecin_id=? AND start=? AND end=?
-                    """,
-                    (medecin_id, s.isoformat(), e.isoformat()),
-                )
-
-                if not exists:
-                    self.db.execute(
-                        """
-                        INSERT INTO creneaux(medecin_id, start, end, available, blocked)
-                        VALUES (?, ?, ?, 1, 0)
-                        """,
-                        (medecin_id, s.isoformat(), e.isoformat()),
-                        commit=False,
-                    )
-                    created += 1
-
-                cursor_dt = e
-
-            self.db.commit()
-            return created
-
-        except Exception:
-            self.db.rollback()
-            return 0
-
-    # Reminder: default within 48h and show only once
     def get_reminder_for_patient(self, patient_id: int, hours: int = 48):
         if hours <= 0:
             return None
@@ -339,7 +370,6 @@ class RDVService:
         except Exception:
             return False
 
-    # Helpers
     def _parse_hhmm(self, hhmm: str) -> Time:
         hhmm = (hhmm or "").strip()
         parts = hhmm.split(":")
