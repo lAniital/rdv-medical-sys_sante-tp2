@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
+from datetime import datetime
 
 from data.db import Database
 from services.rdv_service import RDVService
@@ -38,8 +39,13 @@ class PatientManageWindow:
         self.listbox.delete(0, tk.END)
         self._rdvs = list(self.service.list_patient_rdvs(self.user["id"], include_canceled=True))
         for r in self._rdvs:
-            prefix = "❌ ANNULÉ" if r["status"] == "ANNULE" else "✅ PREVU"
-            self.listbox.insert(tk.END, f"{prefix} | RDV#{r['id']} | Dr {r['medecin_name']} | {r['start']} → {r['end']}")
+            prefix = " ANNULÉ" if r["status"] == "ANNULE" else " PREVU"
+            start_dt = datetime.fromisoformat(r["start"])
+            end_dt = datetime.fromisoformat(r["end"])
+            date_txt = start_dt.strftime("%d/%m/%Y")
+            time_txt = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+            urgent_txt = " (URGENT)" if int(r["is_urgent"]) == 1 else ""
+            self.listbox.insert(tk.END, f"{prefix} | Dr {r['medecin_name']} | {date_txt} {time_txt}{urgent_txt}")
 
     def cancel_selected(self):
         idxs = self.listbox.curselection()

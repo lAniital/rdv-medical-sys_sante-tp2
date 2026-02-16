@@ -18,7 +18,6 @@ class RDVService:
             (medecin_id,),
         )
 
-    # list available slots for a specific date (Date OR "YYYY-MM-DD"), FUTURE ONLY
     def list_available_slots_by_date(self, medecin_id: int, day: Date | str):
         if isinstance(day, str):
             day = datetime.fromisoformat(day.strip()).date()
@@ -33,8 +32,8 @@ class RDVService:
             FROM creneaux
             WHERE medecin_id=?
               AND available=1 AND blocked=0
-              AND start >= ?               -- future only
-              AND start >= ? AND start < ? -- same day
+              AND start >= ?
+              AND start >= ? AND start < ?
             ORDER BY start
             """,
             (medecin_id, now_iso, day_start_dt.isoformat(), day_end_dt.isoformat()),
@@ -102,7 +101,6 @@ class RDVService:
     ) -> int:
         day = self._parse_date_only(date)
 
-        # Prevent creating slots in the past
         if day < datetime.now().date():
             return 0
 
@@ -336,6 +334,29 @@ class RDVService:
             self.db.rollback()
             return False
 
+    def get_next_rdv_within(self, patient_id: int, hours: int = 48):
+        now = datetime.now()
+        limit = now + timedelta(hours=hours)
+
+        return self.db.fetchone(
+            """
+            SELECT r.id, r.status, r.is_urgent, r.urgent_reason, r.reminder_sent,
+                   u.username AS medecin_name,
+                   c.start, c.end
+            FROM rdv r
+            JOIN users u ON r.medecin_id = u.id
+            JOIN creneaux c ON r.creneau_id = c.id
+            WHERE r.patient_id = ?
+              AND r.status = 'PREVU'
+              AND c.start >= ?
+              AND c.start <= ?
+              AND r.reminder_sent = 0
+            ORDER BY c.start
+            LIMIT 1
+            """,
+            (patient_id, now.isoformat(), limit.isoformat()),
+        )
+
     def get_reminder_for_patient(self, patient_id: int, hours: int = 48):
         if hours <= 0:
             return None
@@ -362,6 +383,31 @@ class RDVService:
             """,
             (patient_id, now.isoformat(), limit.isoformat()),
         )
+        
+    def get_popup_reminder_for_patient(self, patient_id: int, hours: int = 48):
+        if hours <= 0:
+            return None
+
+        now = datetime.now()
+        limit = now + timedelta(hours=hours)
+
+        return self.db.fetchone(
+            """
+            SELECT r.id, r.status, r.is_urgent, r.urgent_reason,
+                u.username AS medecin_name,
+                c.start, c.end
+            FROM rdv r
+            JOIN users u ON r.medecin_id = u.id
+            JOIN creneaux c ON r.creneau_id = c.id
+            WHERE r.patient_id = ?
+            AND r.status = 'PREVU'
+            AND c.start >= ?
+            AND c.start <= ?
+            ORDER BY c.start
+            LIMIT 1
+            """,
+            (patient_id, now.isoformat(), limit.isoformat()),
+        )    
 
     def mark_reminder_sent(self, rdv_id: int) -> bool:
         try:
@@ -369,6 +415,48 @@ class RDVService:
             return True
         except Exception:
             return False
+
+    def list_medecin_creneaux_upcoming(self, medecin_id: int):
+        now_iso = datetime.now().isoformat()
+
+        return self.db.fetchall(
+            """
+            SELECT
+                c.id,
+                c.start,
+                c.end,
+                c.available,
+                c.blocked,
+                CASE WHEN r.id IS NULL THEN 0 ELSE 1 END AS booked,
+                r.id AS rdv_id,
+                r.patient_id,
+                u.username AS patient_username
+            FROM creneaux c
+            LEFT JOIN rdv r
+                ON r.creneau_id = c.id
+               AND r.status = 'PREVU'
+            LEFT JOIN users u
+                ON u.id = r.patient_id
+            WHERE c.medecin_id = ?
+              AND c.start >= ?
+            ORDER BY c.start ASC
+            """,
+            (medecin_id, now_iso),
+        )
+
+    def delete_creneau_if_free(self, medecin_id: int, creneau_id: int) -> bool:
+        booked = self.db.fetchone(
+            "SELECT 1 FROM rdv WHERE creneau_id = ? AND status='PREVU' LIMIT 1",
+            (creneau_id,),
+        )
+        if booked:
+            return False
+
+        cur = self.db.execute(
+            "DELETE FROM creneaux WHERE id = ? AND medecin_id = ?",
+            (creneau_id, medecin_id),
+        )
+        return cur.rowcount > 0
 
     def _parse_hhmm(self, hhmm: str) -> Time:
         hhmm = (hhmm or "").strip()

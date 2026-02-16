@@ -33,7 +33,7 @@ class MedecinView:
 
     def open_agenda(self):
         from ui.medecin_agenda import MedecinAgenda
-        MedecinAgenda(self.user, self.service, parent=self.win)
+        MedecinAgenda(self.user, self.win)
 
     def open_create_slots(self):
         from ui.medecin_create_slots import MedecinCreateSlots
