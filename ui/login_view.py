@@ -15,7 +15,9 @@ class LoginView:
 
         self.root = tk.Tk()
         self.root.title(f"Connexion - {self.role}")
-        self.root.geometry("520x260")
+
+        # Do NOT force a small fixed size (causes clipping with Windows scaling)
+        # self.root.geometry("520x260")
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self.back_to_menu)
 
@@ -50,6 +52,13 @@ class LoginView:
         make_btn(frame, "Retour", self.back_to_menu, width=26).grid(
             row=5, column=0, columnspan=2, pady=(6, 0), sticky="ew"
         )
+
+        # Auto-fit window to required size (fixes clipping on Windows scaling)
+        self.root.update_idletasks()
+        w = self.root.winfo_reqwidth() + 40
+        h = self.root.winfo_reqheight() + 40
+        self.root.geometry(f"{w}x{h}")
+        self.root.minsize(w, h)
 
         self.username.focus()
         self.root.mainloop()
@@ -87,19 +96,16 @@ class LoginView:
             MedecinView(user, on_logout=lambda: self.root.deiconify())
             return
 
-        # ADMIN flow
-        try:
-            if user["role"] == "ADMIN":
-                from ui.admin_view import AdminView
-                AdminView(user)
+        
+        # ADMIN flow (same callback style as others)
+        if user["role"] == "ADMIN":
+            from ui.admin_view import AdminView
 
             self.root.withdraw()
+            AdminView(user, on_logout=lambda: self.root.deiconify())
+            return
 
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Erreur", f"Crash after login:\n{e}")
-
+           
     def open_register_patient(self):
         from ui.patient_register import PatientRegister
 

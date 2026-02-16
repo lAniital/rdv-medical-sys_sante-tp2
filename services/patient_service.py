@@ -1,3 +1,4 @@
+# patient_service.py - Service de gestion des patients et RDV
 import tkinter as tk
 from tkinter import messagebox
 
@@ -15,6 +16,39 @@ class PatientService:
             "SELECT id, username, speciality, email FROM users WHERE role='MEDECIN' AND active=1"
         )
 
+    def get_all_specialities(self):
+        rows = self.db.fetchall(
+            """
+            SELECT DISTINCT speciality
+            FROM users
+            WHERE role='MEDECIN'
+            AND active=1
+            AND speciality IS NOT NULL
+            AND TRIM(speciality) != ''
+            ORDER BY speciality
+            """
+        )
+        return [r["speciality"] for r in rows]
+
+
+    def list_medecins_by_speciality(self, speciality: str):
+        speciality = (speciality or "").strip()
+        if not speciality:
+            return []
+
+        return self.db.fetchall(
+            """
+            SELECT id, username, speciality, email
+            FROM users
+            WHERE role='MEDECIN'
+            AND active=1
+            AND speciality = ?
+            ORDER BY username
+            """,
+            (speciality,),
+        )
+    
+    
     def list_available_creneaux(self, medecin_id: int):
         return self.db.fetchall(
             "SELECT id, start, end FROM creneaux WHERE medecin_id=? AND available=1 AND blocked=0 ORDER BY start",

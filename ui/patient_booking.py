@@ -1,4 +1,4 @@
-# ui/patient_booking.py
+# ui/patient_booking.py - Fenêtre de prise de rendez-vous pour les patients
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime, date
@@ -6,6 +6,7 @@ import calendar
 
 from data.db import Database
 from services.rdv_service import RDVService
+from services.patient_service import PatientService
 from ui.theme import apply_theme
 
 
@@ -31,7 +32,8 @@ class PatientBookingWindow:
         self.parent = parent
 
         self.db = Database()
-        self.service = RDVService(self.db)
+        self.service = RDVService(self.db)              # slots-by-date + booking 
+        self.patient_service = PatientService(self.db)  # speciality + doctors filtering
 
         self.win = tk.Toplevel(parent)
         apply_theme(self.win)
@@ -52,6 +54,7 @@ class PatientBookingWindow:
         self.cal_month = self.selected_date.month
 
         self._build_ui()
+        self.load_specialities()
         self.load_medecins()
         self.render_calendar()
 
@@ -77,8 +80,15 @@ class PatientBookingWindow:
         left = tk.Frame(main, bg=DARK_BG)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
 
+        tk.Label(left, text="Spécialité :", bg=DARK_BG, fg=DARK_FG).pack(anchor="w")
+
+        self.speciality_var = tk.StringVar(value="Toutes")
+        self.speciality_menu = tk.OptionMenu(left, self.speciality_var, "Toutes")
+        self.speciality_menu.config(bg=BTN_BG, fg=BTN_FG)
+        self.speciality_menu.pack(fill="x", pady=(6, 10))
+
         tk.Label(left, text="Choisissez un médecin :", bg=DARK_BG, fg=DARK_FG).pack(anchor="w")
-        self.med_list = tk.Listbox(left, width=35, height=14)
+        self.med_list = tk.Listbox(left, width=35, height=12)
         self.med_list.pack(fill="both", expand=False, pady=(6, 10))
         self.med_list.bind("<<ListboxSelect>>", self.on_select_medecin)
 
@@ -166,14 +176,44 @@ class PatientBookingWindow:
 
     def load_medecins(self):
         self.med_list.delete(0, tk.END)
-        self._medecins = list(self.service.list_medecins())
+
+        chosen = self.speciality_var.get().strip() if hasattr(self, "speciality_var") else "Toutes"
+
+        if chosen == "Toutes":
+            self._medecins = list(self.patient_service.list_medecins())
+        else:
+            self._medecins = list(self.patient_service.list_medecins_by_speciality(chosen))
+
         for m in self._medecins:
-            label = f"{m['id']} - Dr {m['username']} ({m['speciality'] or '---'})"
+            # Cleaner label: no doctor id in UI
+            spec = (m["speciality"] or "---")
+            label = f"Dr {m['username']} ({spec})"
             self.med_list.insert(tk.END, label)
 
         self.selected_medecin_id = None
         self.selected_creneau_id = None
         self._clear_times()
+        
+    def load_specialities(self):
+        specs = list(self.patient_service.get_all_specialities())
+
+        # Build menu items: "Toutes" + each speciality
+        menu = self.speciality_menu["menu"]
+        menu.delete(0, "end")
+
+        def set_spec_and_reload(val):
+            self.speciality_var.set(val)
+            self.load_medecins()  # reload doctors list based on selected speciality
+
+        menu.add_command(label="Toutes", command=lambda: set_spec_and_reload("Toutes"))
+
+        for s in specs:
+            menu.add_command(label=s, command=lambda val=s: set_spec_and_reload(val))
+
+        # Default selection if current value not valid anymore
+        if self.speciality_var.get() not in (["Toutes"] + specs):
+            self.speciality_var.set("Toutes")
+        
 
     def on_select_medecin(self, _evt=None):
         idxs = self.med_list.curselection()
