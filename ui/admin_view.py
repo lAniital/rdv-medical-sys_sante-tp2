@@ -1,5 +1,7 @@
+# ui/admin_view.py - Interface d'administration pour gérer les médecins
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 
 from ui.theme import apply_theme
 from data.db import Database
@@ -77,9 +79,30 @@ class AdminView:
         self.e_email = tk.Entry(form, width=28)
         self.e_email.grid(row=2, column=1, pady=4)
 
-        tk.Label(form, text="Spécialité").grid(row=3, column=0, sticky="w", pady=4)
+        # ---- Speciality search + quick select (Combobox) ----
+        tk.Label(form, text="Rechercher spécialité").grid(row=3, column=0, sticky="w", pady=4)
+
+        self.all_specialities = list(self.service.list_specialities())
+        self.spec_var = tk.StringVar(value="")
+
+        self.cb_speciality = ttk.Combobox(
+            form,
+            textvariable=self.spec_var,
+            values=self.all_specialities,
+            width=26,
+            state="normal",  # allow typing
+        )
+        self.cb_speciality.grid(row=3, column=1, pady=4, sticky="ew")
+
+        # When user selects from dropdown -> fill "Spécialité"
+        self.cb_speciality.bind("<<ComboboxSelected>>", self.on_speciality_selected)
+
+        # When user types -> filter values + auto-open dropdown
+        self.cb_speciality.bind("<KeyRelease>", self.on_speciality_type)
+
+        tk.Label(form, text="Spécialité").grid(row=4, column=0, sticky="w", pady=4)
         self.e_speciality = tk.Entry(form, width=28)
-        self.e_speciality.grid(row=3, column=1, pady=4)
+        self.e_speciality.grid(row=4, column=1, pady=4)
 
         form.grid_columnconfigure(1, weight=1)
 
@@ -96,6 +119,33 @@ class AdminView:
 
         self._doctors = []
         self.refresh_doctors()
+
+    # ----------- Speciality combobox behavior -----------
+
+    def on_speciality_selected(self, _evt=None):
+        val = (self.spec_var.get() or "").strip()
+        if val:
+            self.e_speciality.delete(0, tk.END)
+            self.e_speciality.insert(0, val)
+
+    def on_speciality_type(self, _evt=None):
+        typed = (self.spec_var.get() or "").strip().lower()
+
+        if not typed:
+            filtered = self.all_specialities
+        else:
+            filtered = [s for s in self.all_specialities if typed in (s or "").lower()]
+
+        self.cb_speciality["values"] = filtered
+
+        # Auto-open dropdown so user sees results immediately (no click needed)
+        if filtered:
+            try:
+                self.cb_speciality.event_generate("<Down>")
+            except Exception:
+                pass
+
+    # ----------- Doctors list -----------
 
     def refresh_doctors(self):
         self.listbox.delete(0, tk.END)
@@ -114,6 +164,8 @@ class AdminView:
             return None
         return self._doctors[int(sel[0])]
 
+    # ----------- Actions -----------
+
     def add_doctor(self):
         ok, msg = self.service.create_doctor(
             self.e_username.get(),
@@ -130,6 +182,7 @@ class AdminView:
         self.e_password.delete(0, tk.END)
         self.e_email.delete(0, tk.END)
         self.e_speciality.delete(0, tk.END)
+        self.spec_var.set("")  # clear search box
         self.refresh_doctors()
 
     def deactivate_selected(self):

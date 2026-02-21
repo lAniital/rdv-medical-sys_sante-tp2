@@ -1,4 +1,4 @@
-# services/auth_service.py
+# services/auth_service.py - Service de gestion de l'authentification et création de comptes
 import sqlite3
 
 from data.db import Database

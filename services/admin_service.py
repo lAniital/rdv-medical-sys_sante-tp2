@@ -1,4 +1,4 @@
-# services/admin_service.py
+# services/admin_service.py - Service de gestion des médecins (admin)
 import sqlite3
 from data.db import Database
 from services.security import hash_password
@@ -61,6 +61,19 @@ class AdminService:
         except Exception:
             return False, "Erreur lors de la création du médecin."
 
+    def list_specialities(self):
+        rows = self.db.fetchall(
+            """
+            SELECT DISTINCT speciality
+            FROM users
+            WHERE role='MEDECIN'
+            AND speciality IS NOT NULL
+            AND TRIM(speciality) != ''
+            ORDER BY speciality
+            """
+        )
+        return [r["speciality"] for r in rows]
+        
     def deactivate_doctor(self, doctor_id: int) -> bool:
         try:
             self.db.execute("UPDATE users SET active=0 WHERE id=? AND role='MEDECIN'", (doctor_id,))
