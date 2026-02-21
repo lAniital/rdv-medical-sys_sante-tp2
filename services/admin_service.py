@@ -2,6 +2,7 @@
 import sqlite3
 from data.db import Database
 from services.security import hash_password
+from datetime import datetime
 
 
 class AdminService:
@@ -87,3 +88,36 @@ class AdminService:
             return True
         except Exception:
             return False
+    
+    def doctor_has_future_rdvs(self, doctor_id: int) -> bool:
+        row = self.db.fetchone(
+            """
+            SELECT 1
+            FROM rdv r
+            JOIN creneaux c ON c.id = r.creneau_id
+            WHERE r.medecin_id = ?
+              AND r.status = 'PREVU'
+              AND c.start > ?
+            LIMIT 1
+            """,
+            (doctor_id, datetime.now().isoformat()),
+        )
+        return row is not None
+
+    def delete_doctor_hard(self, doctor_id: int) -> tuple[bool, str]:
+        """
+        Hard delete ONLY if doctor has no RDV history.
+        Otherwise, you should deactivate instead.
+        """
+        row = self.db.fetchone(
+            "SELECT 1 FROM rdv WHERE medecin_id = ? LIMIT 1",
+            (doctor_id,),
+        )
+        if row:
+            return False, "Impossible de supprimer: ce médecin a un historique de RDV. Utilisez Désactiver."
+
+        try:
+            self.db.execute("DELETE FROM users WHERE id=? AND role='MEDECIN'", (doctor_id,))
+            return True, "Médecin supprimé."
+        except Exception:
+            return False, "Erreur lors de la suppression."    

@@ -1,4 +1,4 @@
-# services/rdv_service.py
+# services/rdv_service.py - Service de gestion des rendez-vous, créneaux, et agenda
 from datetime import datetime, date as Date, time as Time, timedelta
 from data.db import Database
 
@@ -24,19 +24,28 @@ class RDVService:
 
         day_start_dt = datetime(day.year, day.month, day.day, 0, 0, 0)
         day_end_dt = day_start_dt + timedelta(days=1)
+
         now_iso = datetime.now().isoformat()
+        day_start_iso = day_start_dt.isoformat()
+        day_end_iso = day_end_dt.isoformat()
+
+        # if day is today -> block past hours; if future -> no need for now filter
+        if day == datetime.now().date():
+            min_start = now_iso
+        else:
+            min_start = day_start_iso
 
         return self.db.fetchall(
             """
             SELECT id, start, end
             FROM creneaux
             WHERE medecin_id=?
-              AND available=1 AND blocked=0
-              AND start >= ?
-              AND start >= ? AND start < ?
+            AND available=1 AND blocked=0
+            AND start >= ?
+            AND start < ?
             ORDER BY start
             """,
-            (medecin_id, now_iso, day_start_dt.isoformat(), day_end_dt.isoformat()),
+            (medecin_id, min_start, day_end_iso),
         )
 
     def get_slot_by_start(self, medecin_id: int, start_iso: str):
@@ -244,6 +253,45 @@ class RDVService:
             tuple(params),
         )
 
+    def list_patient_rdvs_upcoming(self, patient_id: int):
+        now_iso = datetime.now().isoformat()
+        return self.db.fetchall(
+            """
+            SELECT r.id, r.status, r.is_urgent, r.urgent_reason, r.created_at,
+                u.username AS medecin_name,
+                c.start, c.end,
+                r.creneau_id,
+                u.id AS medecin_id
+            FROM rdv r
+            JOIN users u ON r.medecin_id = u.id
+            JOIN creneaux c ON r.creneau_id = c.id
+            WHERE r.patient_id = ?
+            AND r.status = 'PREVU'
+            AND c.start >= ?
+            ORDER BY c.start ASC
+            """,
+            (patient_id, now_iso),
+        )
+
+
+    def list_patient_rdvs_canceled(self, patient_id: int):
+        return self.db.fetchall(
+            """
+            SELECT r.id, r.status, r.is_urgent, r.urgent_reason, r.created_at,
+                u.username AS medecin_name,
+                c.start, c.end,
+                r.creneau_id,
+                u.id AS medecin_id
+            FROM rdv r
+            JOIN users u ON r.medecin_id = u.id
+            JOIN creneaux c ON r.creneau_id = c.id
+            WHERE r.patient_id = ?
+            AND r.status = 'ANNULE'
+            ORDER BY c.start DESC
+            """,
+            (patient_id,),
+        )
+    
     def cancel_rdv(self, rdv_id: int) -> bool:
         try:
             rdv = self.db.fetchone(
@@ -445,15 +493,24 @@ class RDVService:
         )
 
     def delete_creneau_if_free(self, medecin_id: int, creneau_id: int) -> bool:
+        slot = self.db.fetchone(
+            "SELECT start FROM creneaux WHERE id=? AND medecin_id=?",
+            (creneau_id, medecin_id),
+        )
+        if not slot:
+            return False
+        if datetime.fromisoformat(slot["start"]) <= datetime.now():
+            return False
+
         booked = self.db.fetchone(
-            "SELECT 1 FROM rdv WHERE creneau_id = ? AND status='PREVU' LIMIT 1",
+            "SELECT 1 FROM rdv WHERE creneau_id=? AND status='PREVU' LIMIT 1",
             (creneau_id,),
         )
         if booked:
             return False
 
         cur = self.db.execute(
-            "DELETE FROM creneaux WHERE id = ? AND medecin_id = ?",
+            "DELETE FROM creneaux WHERE id=? AND medecin_id=?",
             (creneau_id, medecin_id),
         )
         return cur.rowcount > 0

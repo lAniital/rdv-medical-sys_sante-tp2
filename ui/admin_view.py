@@ -195,6 +195,15 @@ class AdminView:
             messagebox.showinfo("Info", "Ce médecin est déjà inactif.")
             return
 
+        # NEW: block if future RDVs exist
+        if self.service.doctor_has_future_rdvs(int(d["id"])):
+            messagebox.showerror(
+                "Erreur",
+                "Impossible de désactiver: ce médecin a des RDV futurs (PREVU).\n"
+                "Annulez/traitez d'abord les RDV, puis réessayez."
+            )
+            return
+
         if not messagebox.askyesno("Confirmer", f"Désactiver Dr {d['username']} ?"):
             return
 
@@ -203,6 +212,7 @@ class AdminView:
         else:
             messagebox.showerror("Erreur", "Impossible de désactiver ce médecin.")
 
+        
     def activate_selected(self):
         d = self._get_selected_doctor()
         if not d:

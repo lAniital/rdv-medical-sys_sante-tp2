@@ -1,5 +1,7 @@
+# ui/patient_manage.py - Gestion des RDV patient (onglets: à venir / annulés)
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 from datetime import datetime
 
 from data.db import Database
@@ -7,7 +9,19 @@ from services.rdv_service import RDVService
 from ui.theme import apply_theme
 
 
+DARK_BG = "#1f1f1f"
+DARK_FG = "#ffffff"
+BTN_BG = "#e6e6e6"
+BTN_FG = "#000000"
+
+
 class PatientManageWindow:
+    """
+    Affiche les RDV du patient en 2 onglets:
+    - À venir (PREVU + start >= now)
+    - Annulés (ANNULE)
+    Permet d'annuler uniquement un RDV à venir.
+    """
     def __init__(self, user: dict, parent: tk.Tk | tk.Toplevel):
         self.user = user
         self.parent = parent
@@ -18,137 +32,176 @@ class PatientManageWindow:
         self.win = tk.Toplevel(parent)
         apply_theme(self.win)
         self.win.title("Gérer mes rendez-vous")
-        self.win.geometry("900x560")
-        self.win.minsize(780, 480)
+        self.win.geometry("920x560")
+        self.win.minsize(820, 520)
         self.win.resizable(True, True)
+        self.win.configure(bg=DARK_BG)
+        self.win.protocol("WM_DELETE_WINDOW", self.back)
 
-        # internal state (keep separate lists)
-        self._future = []
+        # data caches
+        self._upcoming = []
         self._canceled = []
 
         self._build_ui()
         self.refresh()
 
     def _build_ui(self):
-        header = tk.Frame(self.win)
-        header.pack(fill="x", padx=16, pady=(14, 10))
+        top = tk.Frame(self.win, bg=DARK_BG)
+        top.pack(fill="x", padx=16, pady=(12, 8))
 
-        tk.Label(header, text="Gérer mes rendez-vous", font=("Segoe UI", 16, "bold")).pack(anchor="w")
-        self.summary = tk.Label(header, text="", font=("Segoe UI", 10))
+        tk.Label(
+            top,
+            text="Mes rendez-vous",
+            bg=DARK_BG,
+            fg=DARK_FG,
+            font=("Segoe UI", 16, "bold"),
+        ).pack(anchor="w")
+
+        self.summary = tk.Label(top, text="", bg=DARK_BG, fg=DARK_FG, font=("Segoe UI", 10))
         self.summary.pack(anchor="w", pady=(4, 0))
 
-        body = tk.Frame(self.win)
-        body.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        body = tk.Frame(self.win, bg=DARK_BG)
+        body.pack(fill="both", expand=True, padx=16, pady=(0, 16))
 
-        # Two columns: future | canceled
-        left = tk.Frame(body)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        right = tk.Frame(body)
-        right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        self.nb = ttk.Notebook(body)
+        self.nb.pack(fill="both", expand=True)
 
-        body.grid_columnconfigure(0, weight=1)
-        body.grid_columnconfigure(1, weight=1)
-        body.grid_rowconfigure(0, weight=1)
+        self.tab_upcoming = tk.Frame(self.nb, bg=DARK_BG)
+        self.tab_canceled = tk.Frame(self.nb, bg=DARK_BG)
 
-        # ---- FUTURE ----
-        tk.Label(left, text="RDV à venir", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        self.future_list = self._make_list_with_scroll(left)
+        self.nb.add(self.tab_upcoming, text="À venir")
+        self.nb.add(self.tab_canceled, text="Annulés")
 
-        # ---- CANCELED ----
-        tk.Label(right, text="RDV annulés", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        self.cancel_list = self._make_list_with_scroll(right)
+        # Upcoming list
+        up_frame = tk.Frame(self.tab_upcoming, bg=DARK_BG)
+        up_frame.pack(fill="both", expand=True, padx=8, pady=8)
 
-        # Buttons row
-        btns = tk.Frame(self.win)
-        btns.pack(fill="x", padx=16, pady=(0, 16))
+        self.list_upcoming = tk.Listbox(up_frame, height=18)
+        self.list_upcoming.pack(side="left", fill="both", expand=True)
 
-        tk.Button(btns, text="Rafraîchir", height=2, command=self.refresh).pack(
-            side="left", fill="x", expand=True, padx=(0, 8)
+        sb1 = tk.Scrollbar(up_frame, orient="vertical", command=self.list_upcoming.yview)
+        sb1.pack(side="right", fill="y")
+        self.list_upcoming.config(yscrollcommand=sb1.set)
+
+        # Canceled list
+        can_frame = tk.Frame(self.tab_canceled, bg=DARK_BG)
+        can_frame.pack(fill="both", expand=True, padx=8, pady=8)
+
+        self.list_canceled = tk.Listbox(can_frame, height=18)
+        self.list_canceled.pack(side="left", fill="both", expand=True)
+
+        sb2 = tk.Scrollbar(can_frame, orient="vertical", command=self.list_canceled.yview)
+        sb2.pack(side="right", fill="y")
+        self.list_canceled.config(yscrollcommand=sb2.set)
+
+        # Buttons
+        btns = tk.Frame(body, bg=DARK_BG)
+        btns.pack(fill="x", pady=(12, 0))
+
+        tk.Button(
+            btns, text="Rafraîchir", bg=BTN_BG, fg=BTN_FG, height=2,
+            command=self.refresh
+        ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self.btn_cancel = tk.Button(
+            btns, text="Annuler le RDV (à venir)", bg=BTN_BG, fg=BTN_FG, height=2,
+            command=self.cancel_selected_upcoming
         )
-        tk.Button(btns, text="Annuler RDV (à venir)", height=2, command=self.cancel_selected_future).pack(
-            side="left", fill="x", expand=True, padx=(0, 8)
-        )
-        tk.Button(btns, text="Retour", height=2, command=self.back).pack(
-            side="left", fill="x", expand=True
-        )
+        self.btn_cancel.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
-    def _make_list_with_scroll(self, parent: tk.Frame) -> tk.Listbox:
-        frame = tk.Frame(parent)
-        frame.pack(fill="both", expand=True, pady=(6, 0))
+        tk.Button(
+            btns, text="Retour", bg=BTN_BG, fg=BTN_FG, height=2,
+            command=self.back
+        ).pack(side="left", fill="x", expand=True)
 
-        lb = tk.Listbox(frame)
-        lb.pack(side="left", fill="both", expand=True)
+        self.nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self._on_tab_changed()
 
-        sb = tk.Scrollbar(frame, orient="vertical", command=lb.yview)
-        sb.pack(side="right", fill="y")
-        lb.config(yscrollcommand=sb.set)
-
-        return lb
+    def _on_tab_changed(self, _evt=None):
+        tab_text = self.nb.tab(self.nb.select(), "text")
+        # Cancel only allowed in "À venir"
+        self.btn_cancel.config(state=("normal" if tab_text == "À venir" else "disabled"))
 
     def refresh(self):
-        self.future_list.delete(0, tk.END)
-        self.cancel_list.delete(0, tk.END)
+        self.list_upcoming.delete(0, tk.END)
+        self.list_canceled.delete(0, tk.END)
+        self._upcoming = []
+        self._canceled = []
 
-        all_rdvs = list(self.service.list_patient_rdvs(self.user["id"], include_canceled=True))
+        upcoming = list(self.service.list_patient_rdvs_upcoming(self.user["id"]))
+        canceled = list(self.service.list_patient_rdvs_canceled(self.user["id"]))
 
-        # split
-        self._future = [r for r in all_rdvs if r["status"] != "ANNULE"]
-        self._canceled = [r for r in all_rdvs if r["status"] == "ANNULE"]
+        self._upcoming = upcoming
+        self._canceled = canceled
 
-        # sort by start datetime
-        self._future.sort(key=lambda r: r["start"])
-        self._canceled.sort(key=lambda r: r["start"])
+        # Fill upcoming
+        if not upcoming:
+            self.list_upcoming.insert(tk.END, "Aucun RDV à venir.")
+        else:
+            for r in upcoming:
+                start_dt = datetime.fromisoformat(r["start"])
+                end_dt = datetime.fromisoformat(r["end"])
+                date_txt = start_dt.strftime("%d/%m/%Y")
+                time_txt = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+                urgent_txt = " | URGENT" if int(r["is_urgent"]) == 1 else ""
+                line = f"{date_txt} {time_txt} | Dr {r['medecin_name']}{urgent_txt}"
+                self.list_upcoming.insert(tk.END, line)
+
+        # Fill canceled
+        if not canceled:
+            self.list_canceled.insert(tk.END, "Aucun RDV annulé.")
+        else:
+            for r in canceled:
+                start_dt = datetime.fromisoformat(r["start"])
+                end_dt = datetime.fromisoformat(r["end"])
+                date_txt = start_dt.strftime("%d/%m/%Y")
+                time_txt = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+                urgent_txt = " | URGENT" if int(r["is_urgent"]) == 1 else ""
+                line = f"{date_txt} {time_txt} | Dr {r['medecin_name']}{urgent_txt}"
+                self.list_canceled.insert(tk.END, line)
 
         self.summary.config(
-            text=f"Total: {len(all_rdvs)} | À venir: {len(self._future)} | Annulés: {len(self._canceled)}"
+            text=f"À venir: {len(upcoming)} | Annulés: {len(canceled)}"
         )
+        self._on_tab_changed()
 
-        if not self._future:
-            self.future_list.insert(tk.END, "Aucun RDV à venir.")
-        else:
-            for r in self._future:
-                self.future_list.insert(tk.END, self._format_line(r, prefix="PREVU"))
-
-        if not self._canceled:
-            self.cancel_list.insert(tk.END, "Aucun RDV annulé.")
-        else:
-            for r in self._canceled:
-                self.cancel_list.insert(tk.END, self._format_line(r, prefix="ANNULÉ"))
-
-    def _format_line(self, r: dict, prefix: str) -> str:
-        start_dt = datetime.fromisoformat(r["start"])
-        end_dt = datetime.fromisoformat(r["end"])
-        date_txt = start_dt.strftime("%d/%m/%Y")
-        time_txt = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
-        urgent_txt = " (URGENT)" if int(r["is_urgent"]) == 1 else ""
-        return f"{prefix} | Dr {r['medecin_name']} | {date_txt} {time_txt}{urgent_txt}"
-
-    def cancel_selected_future(self):
-        if not self._future:
+    def cancel_selected_upcoming(self):
+        if not self._upcoming:
             messagebox.showinfo("Info", "Aucun RDV à annuler.")
             return
 
-        idxs = self.future_list.curselection()
+        idxs = self.list_upcoming.curselection()
         if not idxs:
-            messagebox.showinfo("Info", "Sélectionnez un RDV dans la liste 'RDV à venir'.")
+            messagebox.showwarning("Info", "Sélectionnez un RDV à venir.")
             return
 
         idx = int(idxs[0])
-        if idx >= len(self._future):
+        if idx >= len(self._upcoming):
             return
 
-        r = self._future[idx]
+        rdv = self._upcoming[idx]
+        start_dt = datetime.fromisoformat(rdv["start"])
+        if start_dt <= datetime.now():
+            messagebox.showerror("Erreur", "Impossible: RDV déjà passé.")
+            return
 
-        ok = messagebox.askyesno("Confirmation", "Annuler ce rendez-vous ?")
+        if not messagebox.askyesno("Confirmation", "Annuler ce rendez-vous ?"):
+            return
+
+        ok = self.service.cancel_rdv(int(rdv["id"]))
         if not ok:
-            return
-
-        done = self.service.cancel_rdv(r["id"])
-        if not done:
             messagebox.showerror("Erreur", "Annulation impossible.")
             return
 
+        messagebox.showinfo("OK", "Rendez-vous annulé.")
         self.refresh()
+
+        # refresh reminder card in PatientHome if available
+        if hasattr(self.parent, "refresh_reminder"):
+            try:
+                self.parent.refresh_reminder()
+            except Exception:
+                pass
 
     def back(self):
         try:

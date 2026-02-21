@@ -1,4 +1,4 @@
-# ui/patient_home.py
+# ui/patient_home.py - Interface d'accueil du patient après login, avec rappel des RDV à venir, accès à la prise de RDV et à la gestion des RDV
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime

@@ -1,4 +1,4 @@
-# ui/patient_register.py
+# ui/patient_register.py - Interface d'inscription pour les patients (appelée depuis login_view)
 import tkinter as tk
 from tkinter import messagebox
 
@@ -12,8 +12,11 @@ class PatientRegister:
 
         self.win = tk.Toplevel(parent)
         self.win.title("Créer un compte - PATIENT")
-        self.win.geometry("520x330")  # was 280
-        self.win.resizable(False, False)
+
+        # FIX: allow resizing + safe size
+        self.win.geometry("820x520")
+        self.win.minsize(650, 420)
+        self.win.resizable(True, True)
 
         apply_theme(self.win)
 
@@ -48,6 +51,12 @@ class PatientRegister:
         make_btn(frame, "Retour", command=self.win.destroy).grid(
             row=6, column=0, columnspan=2, sticky="ew"
         )
+
+        # OPTIONAL: auto-fit to content (helps with Windows scaling)
+        self.win.update_idletasks()
+        w = max(self.win.winfo_reqwidth(), 650)
+        h = max(self.win.winfo_reqheight(), 420)
+        self.win.geometry(f"{w}x{h}")
 
         self.username.focus_set()
 

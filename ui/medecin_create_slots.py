@@ -1,4 +1,4 @@
-# ui/medecin_create_slots.py
+# ui/medecin_create_slots.py - Interface pour que les médecins créent facilement des créneaux sur une date ou une semaine
 import tkinter as tk
 from tkinter import messagebox
 from datetime import date, datetime, timedelta
@@ -268,7 +268,10 @@ class MedecinCreateSlots:
 
             total_created += self._create_for_day(day, silent=True)
 
-        messagebox.showinfo("Info", f"Créneaux créés: {total_created}")
+        if total_created > 0:
+            messagebox.showinfo("OK", f"Créneaux créés: {total_created}")
+        else:
+            messagebox.showinfo("Info", "Aucun nouveau créneau créé (ils existent déjà).")
 
     def _create_for_day(self, day, silent=False):
         try:
@@ -299,7 +302,10 @@ class MedecinCreateSlots:
             step=step_int,
         )
 
-        if not silent and created <= 0:
-            messagebox.showinfo("Info", "Aucun créneau créé.")
+        if not silent:
+            if created > 0:
+                messagebox.showinfo("OK", f"{created} créneau(x) créé(s).")
+            else:
+                messagebox.showinfo("Info", "Aucun nouveau créneau créé (ils existent déjà).")
 
         return created
