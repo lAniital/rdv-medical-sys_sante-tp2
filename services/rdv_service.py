@@ -478,7 +478,9 @@ class RDVService:
                 CASE WHEN r.id IS NULL THEN 0 ELSE 1 END AS booked,
                 r.id AS rdv_id,
                 r.patient_id,
-                u.username AS patient_username
+                u.username AS patient_username,
+                r.is_urgent,
+                r.urgent_reason
             FROM creneaux c
             LEFT JOIN rdv r
                 ON r.creneau_id = c.id

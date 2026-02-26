@@ -1,4 +1,3 @@
-# ui/medecin_agenda.py - Affiche les créneaux à venir du médecin, séparés en libres et réservés, avec possibilité de supprimer un créneau libre
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
@@ -21,6 +20,7 @@ class MedecinAgenda:
     - Réservés
     Permet de supprimer uniquement un créneau libre.
     """
+
     def __init__(self, user: dict, parent: tk.Tk | tk.Toplevel):
         self.user = user
         self.parent = parent
@@ -37,7 +37,6 @@ class MedecinAgenda:
         self.win.configure(bg=DARK_BG)
         self.win.protocol("WM_DELETE_WINDOW", self.back)
 
-        # data
         self._free_items = []
         self._booked_items = []
 
@@ -49,20 +48,25 @@ class MedecinAgenda:
         top.pack(fill="x", padx=16, pady=(12, 8))
 
         tk.Label(
-            top, text="Agenda (créneaux à venir)",
-            bg=DARK_BG, fg=DARK_FG, font=("Segoe UI", 16, "bold")
+            top,
+            text="Agenda (créneaux à venir)",
+            bg=DARK_BG,
+            fg=DARK_FG,
+            font=("Segoe UI", 16, "bold"),
         ).pack(anchor="w")
 
         self.summary_label = tk.Label(
-            top, text="",
-            bg=DARK_BG, fg=DARK_FG, font=("Segoe UI", 10)
+            top,
+            text="",
+            bg=DARK_BG,
+            fg=DARK_FG,
+            font=("Segoe UI", 10),
         )
         self.summary_label.pack(anchor="w", pady=(4, 0))
 
         body = tk.Frame(self.win, bg=DARK_BG)
         body.pack(fill="both", expand=True, padx=16, pady=(0, 16))
 
-        # Notebook: Libres / Réservés
         self.nb = ttk.Notebook(body)
         self.nb.pack(fill="both", expand=True)
 
@@ -72,7 +76,6 @@ class MedecinAgenda:
         self.nb.add(self.tab_free, text="Libres")
         self.nb.add(self.tab_booked, text="Réservés")
 
-        # FREE list
         free_frame = tk.Frame(self.tab_free, bg=DARK_BG)
         free_frame.pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -83,7 +86,6 @@ class MedecinAgenda:
         sb1.pack(side="right", fill="y")
         self.list_free.config(yscrollcommand=sb1.set)
 
-        # BOOKED list
         booked_frame = tk.Frame(self.tab_booked, bg=DARK_BG)
         booked_frame.pack(fill="both", expand=True, padx=8, pady=8)
 
@@ -94,36 +96,61 @@ class MedecinAgenda:
         sb2.pack(side="right", fill="y")
         self.list_booked.config(yscrollcommand=sb2.set)
 
-        # Buttons bottom
         btns = tk.Frame(body, bg=DARK_BG)
         btns.pack(fill="x", pady=(12, 0))
 
         tk.Button(
-            btns, text="Rafraîchir", bg=BTN_BG, fg=BTN_FG, height=2,
-            command=self.refresh
+            btns,
+            text="Rafraîchir",
+            bg=BTN_BG,
+            fg=BTN_FG,
+            height=2,
+            command=self.refresh,
         ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
         self.btn_delete = tk.Button(
-            btns, text="Supprimer le créneau (libre)", bg=BTN_BG, fg=BTN_FG, height=2,
-            command=self.delete_selected_free
+            btns,
+            text="Supprimer le créneau (libre)",
+            bg=BTN_BG,
+            fg=BTN_FG,
+            height=2,
+            command=self.delete_selected_free,
         )
         self.btn_delete.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
         tk.Button(
-            btns, text="Retour", bg=BTN_BG, fg=BTN_FG, height=2,
-            command=self.back
+            btns,
+            text="Retour",
+            bg=BTN_BG,
+            fg=BTN_FG,
+            height=2,
+            command=self.back,
         ).pack(side="left", fill="x", expand=True)
 
-        # If user switches tab, keep delete behavior consistent
         self.nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
     def _on_tab_changed(self, _evt=None):
         tab_text = self.nb.tab(self.nb.select(), "text")
-        # Only allow delete on "Libres" tab
-        if tab_text == "Libres":
-            self.btn_delete.config(state="normal")
-        else:
-            self.btn_delete.config(state="disabled")
+        self.btn_delete.config(state="normal" if tab_text == "Libres" else "disabled")
+
+    def _row_value(self, row, key, default=None):
+        """Safe access for sqlite3.Row (no .get())."""
+        try:
+            return row[key]
+        except Exception:
+            return default
+
+    def _parse_dt(self, value: str) -> datetime:
+        if value is None:
+            raise ValueError("Datetime value is None")
+        s = str(value).strip()
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            if "." in s:
+                s = s.split(".", 1)[0]
+                return datetime.fromisoformat(s)
+            raise
 
     def refresh(self):
         self.list_free.delete(0, tk.END)
@@ -131,29 +158,76 @@ class MedecinAgenda:
         self._free_items = []
         self._booked_items = []
 
-        rows = list(self.service.list_medecin_creneaux_upcoming(self.user["id"]))
+        try:
+            rows = list(self.service.list_medecin_creneaux_upcoming(self.user["id"]))
+        except Exception as e:
+            self.summary_label.config(text="Erreur lors du chargement des créneaux.")
+            messagebox.showerror("Erreur", f"Impossible de charger les créneaux.\n\n{e}")
+            return
 
         if not rows:
             self.summary_label.config(text="Aucun créneau à venir.")
             self.list_free.insert(tk.END, "Aucun créneau libre.")
             self.list_booked.insert(tk.END, "Aucun créneau réservé.")
+            self._on_tab_changed()
             return
 
-        for row in rows:
-            start_dt = datetime.fromisoformat(row["start"])
-            end_dt = datetime.fromisoformat(row["end"])
-            date_txt = start_dt.strftime("%d/%m/%Y")
-            time_txt = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
+        try:
+            for row in rows:
+                start_dt = self._parse_dt(self._row_value(row, "start"))
+                end_dt = self._parse_dt(self._row_value(row, "end"))
+                date_txt = start_dt.strftime("%d/%m/%Y")
+                time_txt = f"{start_dt.strftime('%H:%M')}–{end_dt.strftime('%H:%M')}"
 
-            if row["booked"]:
-                extra = f" | patient: {row['patient_username']}"
-                line = f"{date_txt} {time_txt}{extra}"
-                self._booked_items.append(row)
-                self.list_booked.insert(tk.END, line)
-            else:
-                line = f"{date_txt} {time_txt}"
-                self._free_items.append(row)
-                self.list_free.insert(tk.END, line)
+                booked = self._row_value(row, "booked", 0)
+
+                if booked:
+                    v = self._row_value(row, "is_urgent", 0)
+
+                    # robust conversion to bool
+                    if v is None:
+                        is_urgent = False
+                    elif isinstance(v, bool):
+                        is_urgent = v
+                    elif isinstance(v, (int, float)):
+                        is_urgent = int(v) == 1
+                    else:
+                        s = str(v).strip().lower()
+                        is_urgent = s in ("1", "true", "yes", "y", "urgent")
+
+                    urgent_txt = ""
+                    if is_urgent:
+                        reason = (self._row_value(row, "urgent_reason", "") or "").strip()
+                        urgent_txt = " | URGENT" + (f" ({reason})" if reason else "")
+
+                    patient = self._row_value(row, "patient_username", "")
+                    extra = f" | patient: {patient}{urgent_txt}"
+                    line = f"{date_txt} {time_txt}{extra}"
+
+                    self._booked_items.append(row)
+                    self.list_booked.insert(tk.END, line)
+                else:
+                    line = f"{date_txt} {time_txt}"
+                    self._free_items.append(row)
+                    self.list_free.insert(tk.END, line)
+
+        except Exception as e:
+            self.summary_label.config(text="Erreur pendant l'affichage des créneaux.")
+            messagebox.showerror(
+                "Erreur",
+                "Une erreur est survenue pendant l'affichage.\n"
+                "Regarde aussi le terminal pour les détails.\n\n"
+                f"{e}",
+            )
+            self.list_free.insert(tk.END, "Erreur d'affichage (voir message).")
+            self.list_booked.insert(tk.END, "Erreur d'affichage (voir message).")
+            self._on_tab_changed()
+            return
+
+        if not self._free_items:
+            self.list_free.insert(tk.END, "Aucun créneau libre.")
+        if not self._booked_items:
+            self.list_booked.insert(tk.END, "Aucun créneau réservé.")
 
         self.summary_label.config(
             text=f"Total: {len(rows)} | Libres: {len(self._free_items)} | Réservés: {len(self._booked_items)}"
@@ -175,8 +249,8 @@ class MedecinAgenda:
             return
 
         row = self._free_items[idx]
+        start_dt = self._parse_dt(self._row_value(row, "start"))
 
-        start_dt = datetime.fromisoformat(row["start"])
         if start_dt <= datetime.now():
             messagebox.showerror("Erreur", "Impossible: créneau déjà passé.")
             return
