@@ -50,6 +50,29 @@ This diagram illustrates the actors and use cases of the system.
 
 ![Use Case Diagram](figures/uml_usecase.png)
 
+## Screenshots
+
+### Main Menu
+![Main Menu](screenshots/01_main_menu.png)
+
+### Doctor Agenda – Free Slots
+![Doctor Agenda](screenshots/02_doctor_agenda_free.png)
+
+### Doctor Agenda – Urgent Appointment
+![Doctor Urgent](screenshots/03_doctor_agenda_urgent.png)
+
+### Patient Reminder Popup
+![Patient Reminder Popup](screenshots/04_patient_home_popup_reminder.png)
+
+### Patient Reminder Banner
+![Patient Reminder Banner](screenshots/05_patient_home_banner_reminder.png)
+
+### Admin Panel
+![Admin Panel](screenshots/06_admin_panel.png)
+
+### Patient Booking
+![Patient Booking](screenshots/07_patient_booking_screen.png)
+
 ## Future Improvements
 - Email-based reminder notifications
 - Calendar-style visual agenda (monthly/weekly grid view)
