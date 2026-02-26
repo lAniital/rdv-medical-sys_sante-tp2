@@ -44,6 +44,12 @@ It includes 3 roles: **Admin**, **Doctor (Médecin)**, and **Patient**.
 - `ui/` : Tkinter windows
 - `data/` : database access
 
+## UML Diagram
+
+This diagram illustrates the actors and use cases of the system.
+
+![Use Case Diagram](figures/uml_usecase.png)
+
 ## Future Improvements
 - Email-based reminder notifications
 - Calendar-style visual agenda (monthly/weekly grid view)
