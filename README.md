@@ -1,158 +1,204 @@
-# RDV Medical (Tkinter + SQLite)
+RDV Medical (Tkinter + SQLite)
 
-A desktop medical appointment management system built with **Python (Tkinter)** and **SQLite**.
-It manages scheduling workflows between **Admin**, **Doctor (Médecin)**, and **Patient** using a modular layered architecture.
+A desktop medical appointment management system built with Python (Tkinter) and SQLite.
+It manages scheduling workflows between Admin, Doctor (Médecin), and Patient using a modular layered architecture.
 
 The system separates:
 
-* **User Interface (Tkinter)**
-* **Business Logic (Services layer)**
-* **Data Access Layer (SQLite)**
+User Interface (Tkinter)
 
----
+Business Logic (Services layer)
 
-## Features
+Data Access Layer (SQLite)
 
-### Authentication
+This layered design ensures maintainability, modularity, and clear separation of responsibilities.
 
-* Secure login for Admin / Doctor / Patient
-* Passwords stored securely using **hashing** (no plaintext storage)
-* Patient self-registration
-* Role-based access control
+Features
+Authentication
 
----
+Secure login for Admin / Doctor / Patient
 
-### Admin (Espace Admin)
+Passwords stored using SHA-256 hashing (no plaintext storage)
 
-* Create doctor accounts
-* Assign speciality
-* Activate / deactivate doctors
-* Dynamic speciality filtering (Combobox)
-* Soft deactivation (historical data preserved)
+Patient self-registration
 
----
+Role-based access control
 
-### Doctor (Espace Médecin)
+Admin (Espace Admin)
 
-* Create appointment slots (daily / weekly)
-* Presets: Morning / Afternoon / Custom
-* Prevent creating slots in past dates
-* Agenda view:
+Create doctor accounts
 
-  * **Free slots (Libres)** → can delete future free slots
-  * **Reserved slots (Réservés)** → shows patient details
-* Urgent appointment visualization
-* Automatic filtering of upcoming appointments only
+Assign speciality
 
----
+Activate / deactivate doctors
 
-### Patient (Espace Patient)
+Dynamic speciality filtering (Combobox)
 
-* Browse doctors (with speciality filter)
-* Interactive calendar (past dates disabled)
-* Time slots filtering (past hours disabled for today)
-* Book standard or urgent appointments
-* Urgent booking requires justification
-* Manage appointments (view / cancel / modify)
-* Reminder system:
+Soft deactivation (historical data preserved)
 
-  * Popup alert on login (within 48h)
-  * Visual reminder banner (48h window)
+Doctor (Espace Médecin)
 
----
+Create appointment slots (daily / weekly)
 
-## Tech Stack
+Presets: Morning / Afternoon / Custom
 
-* Python 3
-* Tkinter (GUI Framework)
-* SQLite3 (Embedded Database)
+Prevent creating slots in past dates
 
----
+Agenda view:
 
-## Project Structure
+Free slots (Libres) → delete future free slots
 
-* `ui/` → Tkinter interface
-* `services/` → Business logic (Auth, RDV, Admin)
-* `data/` → Database layer
-* `figures/` → UML diagrams
-* `screenshots/` → Documentation images
+Reserved slots (Réservés) → display patient details
 
-This layered architecture improves modularity, maintainability, and scalability.
+Urgent appointment visualization
 
----
+Automatic filtering of upcoming appointments
 
-## Database
+Patient (Espace Patient)
+
+Browse doctors (with speciality filter)
+
+Interactive calendar (past dates disabled)
+
+Time filtering (past hours disabled for current day)
+
+Book standard or urgent appointments
+
+Urgent booking requires justification
+
+Manage appointments (view / cancel / modify)
+
+Reminder system:
+
+Popup alert on login (within 48h)
+
+Persistent visual reminder banner
+
+Tech Stack
+
+Python 3
+
+Tkinter (GUI Framework)
+
+SQLite3 (Embedded Database)
+
+Project Structure
+
+ui/ → Tkinter interface
+
+services/ → Business logic (Auth, RDV, Admin)
+
+data/ → Database layer
+
+figures/ → UML diagrams
+
+screenshots/ → Documentation images
+
+Database
 
 SQLite relational schema includes:
 
-* `users`
-* `creneaux` (appointment slots)
-* `rdv` (appointments)
+users
 
-### Relationships
+creneaux (appointment slots)
 
-* One doctor → multiple slots
-* One slot → zero or one appointment
-* One patient → multiple appointments
+rdv (appointments)
 
----
+Relationships
 
-## UML Diagram
+One doctor → multiple slots
 
-This diagram illustrates the actors and use cases of the system.
+One slot → zero or one appointment
 
-![Use Case Diagram](figures/uml_usecase.png)
+One patient → multiple appointments
 
----
+UML Diagram
 
-## Screenshots
+Screenshots
+Main Menu
 
-### Main Menu
+Doctor Agenda – Free Slots
 
-![Main Menu](screenshots/01_main_menu.png)
+Doctor Agenda – Urgent Appointment
 
-### Doctor Agenda – Free Slots
+Patient Reminder Popup
 
-![Doctor Agenda](screenshots/02_doctor_agenda_free.png)
+Patient Reminder Banner
 
-### Doctor Agenda – Urgent Appointment
+Admin Panel
 
-![Doctor Urgent](screenshots/03_doctor_agenda_urgent.png)
+Patient Booking
 
-### Patient Reminder Popup
+▶ How to Run
 
-![Patient Reminder Popup](screenshots/04_patient_home_popup_reminder.png)
+Install Python 3
 
-### Patient Reminder Banner
+Navigate to the project folder
 
-![Patient Reminder Banner](screenshots/05_patient_home_banner_reminder.png)
+Run:
 
-### Admin Panel
+python main.py
 
-![Admin Panel](screenshots/06_admin_panel.png)
+The login window will appear automatically.
 
-### Patient Booking
+🔐 Demo Credentials (For Evaluation)
 
-![Patient Booking](screenshots/07_patient_booking_screen.png)
+Pre-configured accounts are provided for academic evaluation:
 
----
+Administrator
 
-## Future Improvements
+Username: admin
 
-* Email notification service (SMTP integration)
-* SMS notification system
-* Full calendar grid view (monthly layout)
-* Statistical dashboard (appointments per doctor / month)
-* Responsive UI scaling
-* REST API version (Flask / FastAPI backend)
+Password: admin
 
----
+Doctor
 
-## How to Run
+Username: dranita
 
-1. Install Python 3
-2. Run the application:
+Password: anita
 
-   ```bash
-   python main.py
-   ```
+Patient
+
+Username: patient1
+
+Password: 1234
+
+🧪 Suggested Evaluation Flow
+
+To test the system:
+
+Login as Admin
+
+Create or deactivate a doctor
+
+Login as Doctor
+
+Create appointment slots
+
+Login as Patient
+
+Book a standard appointment
+
+Book an urgent appointment (motif required)
+
+Verify:
+
+Double booking prevention
+
+48h reminder popup
+
+Role-based access separation
+
+Future Improvements
+
+Email notification service (SMTP integration)
+
+SMS notification system
+
+Monthly calendar grid view
+
+Statistical dashboard (appointments per doctor / month)
+
+REST API version (Flask / FastAPI backend)
+
+Stronger password security (salting + authentication hardening)
